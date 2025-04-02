@@ -9,11 +9,11 @@ function startGame() {
   const keys = {};
 
   // Variables for mouse-controlled camera rotation
-  let yaw = Math.PI;  // Start facing the player from "behind"
+  let yaw = Math.PI;  // Starting yaw so the camera starts behind the player
   let pitch = 0.1;    // Slight upward pitch initially
   const sensitivity = 0.002;
   const cameraDistance = 10;
-  const verticalOffset = 3; // Raise the target a bit so the camera orbits above the player’s center
+  const verticalOffset = 3; // Raise the target a bit so the camera orbits above the player's center
 
   init();
   animate();
@@ -25,7 +25,7 @@ function startGame() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87ceeb); // light blue sky
 
-    // Set up camera with a perspective view. Its position will be calculated every frame.
+    // Set up camera with a perspective view. Its position will be updated each frame.
     camera = new THREE.PerspectiveCamera(
       75,
       window.innerWidth / window.innerHeight,
@@ -33,14 +33,14 @@ function startGame() {
       1000
     );
 
-    // Renderer: use the existing canvas element
+    // Renderer: use the existing canvas element.
     renderer = new THREE.WebGLRenderer({
       canvas: document.getElementById("gameCanvas"),
       antialias: true
     });
     renderer.setSize(window.innerWidth, window.innerHeight);
 
-    // Add lighting (directional and ambient)
+    // Add simple lights
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
     directionalLight.position.set(10, 10, 10);
     scene.add(directionalLight);
@@ -73,18 +73,18 @@ function startGame() {
     // -----------------------------
     // PLAYER SETUP
     // -----------------------------
-    // Create a player (red cube) - THREE.js mesh
+    // Create the player (red cube) as a THREE.js mesh.
     const playerGeometry = new THREE.BoxGeometry(1, 1, 1);
     const playerMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 });
     playerMesh = new THREE.Mesh(playerGeometry, playerMaterial);
     scene.add(playerMesh);
 
-    // Create a player body (Cannon.js)
+    // Create the player body (Cannon.js)
     const boxShape = new CANNON.Box(new CANNON.Vec3(0.5, 0.5, 0.5));
     playerBody = new CANNON.Body({ mass: 1 });
     playerBody.addShape(boxShape);
     playerBody.position.set(0, 2, 0);
-    // Disable rotation for simpler controls
+    // Disable rotation for easier control
     playerBody.fixedRotation = true;
     playerBody.angularDamping = 1;
     world.addBody(playerBody);
@@ -92,6 +92,7 @@ function startGame() {
     // -----------------------------
     // INPUT HANDLING
     // -----------------------------
+    // Keyboard input
     window.addEventListener("keydown", (e) => {
       keys[e.code] = true;
     });
@@ -100,17 +101,17 @@ function startGame() {
     });
     window.addEventListener("resize", onWindowResize);
 
-    // Add pointer lock: Click on the canvas to lock the mouse pointer.
+    // Pointer lock: click on the canvas to lock the mouse pointer.
     const canvas = document.getElementById("gameCanvas");
     canvas.addEventListener("click", function () {
       canvas.requestPointerLock();
     });
 
-    // Listen for mouse movements to control the camera
+    // Listen for mouse movements to control the camera.
     document.addEventListener("mousemove", onMouseMove, false);
   }
 
-  // Adjust camera and renderer on window resize
+  // Adjust camera and renderer on window resize.
   function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -119,13 +120,14 @@ function startGame() {
 
   // Update yaw and pitch based on mouse movement if pointer is locked.
   function onMouseMove(e) {
-    // Check if pointer is locked on our canvas
     const canvas = document.getElementById("gameCanvas");
     if (document.pointerLockElement === canvas) {
+      // Update yaw normally
       yaw -= e.movementX * sensitivity;
-      pitch -= e.movementY * sensitivity;
+      // Invert the Y controls: add instead of subtracting.
+      pitch += e.movementY * sensitivity;
 
-      // Clamp pitch to prevent flipping
+      // Clamp pitch to prevent flipping too far (keeping within nearly vertical limits)
       const maxPitch = Math.PI / 2 - 0.1;
       const minPitch = -Math.PI / 2 + 0.1;
       if (pitch > maxPitch) pitch = maxPitch;
@@ -133,50 +135,61 @@ function startGame() {
     }
   }
 
-  // Main animation loop
+  // Main loop: physics step, player movement, camera update, and rendering.
   function animate(time) {
     requestAnimationFrame(animate);
 
-    // Calculate time elapsed since the last frame
+    // Calculate time elapsed since the last frame.
     const delta = lastTime ? (time - lastTime) / 1000 : 0;
     lastTime = time;
 
     // -----------------------------
-    // PHYSICS: Step the physics simulation
+    // PHYSICS STEP
     // -----------------------------
     const fixedTimeStep = 1.0 / 60.0; // seconds
     world.step(fixedTimeStep, delta, 10);
 
     // -----------------------------
-    // PLAYER MOVEMENT CONTROL
+    // PLAYER MOVEMENT CONTROL (relative to camera yaw only)
     // -----------------------------
     const moveForce = 10;
     const jumpVelocity = 5;
-    const moveDirection = new CANNON.Vec3(0, 0, 0);
+
+    // Create a movement direction vector (we'll build it relative to camera yaw).
+    let moveDir = new CANNON.Vec3(0, 0, 0);
+    // Calculate the forward direction (ignoring pitch) — based on the current yaw.
+    let forwardDir = new CANNON.Vec3(Math.sin(yaw), 0, Math.cos(yaw));
+    // Calculate the right direction (perpendicular to forward).
+    let rightDir = new CANNON.Vec3(Math.cos(yaw), 0, -Math.sin(yaw));
+
+    // Add directional input.
     if (keys["KeyW"] || keys["ArrowUp"]) {
-      moveDirection.z -= 1;
+      moveDir.x += forwardDir.x;
+      moveDir.z += forwardDir.z;
     }
     if (keys["KeyS"] || keys["ArrowDown"]) {
-      moveDirection.z += 1;
-    }
-    if (keys["KeyA"] || keys["ArrowLeft"]) {
-      moveDirection.x -= 1;
+      moveDir.x -= forwardDir.x;
+      moveDir.z -= forwardDir.z;
     }
     if (keys["KeyD"] || keys["ArrowRight"]) {
-      moveDirection.x += 1;
+      moveDir.x += rightDir.x;
+      moveDir.z += rightDir.z;
     }
-    if (moveDirection.length() > 0) {
-      moveDirection.normalize();
+    if (keys["KeyA"] || keys["ArrowLeft"]) {
+      moveDir.x -= rightDir.x;
+      moveDir.z -= rightDir.z;
     }
-    // Directly set the horizontal velocity for a simple arcade feel
-    playerBody.velocity.x = moveDirection.x * moveForce;
-    playerBody.velocity.z = moveDirection.z * moveForce;
 
-    // Allow jumping if the player is near the ground.
-    if (
-      (keys["Space"] || keys["KeyJ"]) &&
-      Math.abs(playerBody.position.y - 0.5) < 0.1
-    ) {
+    if (moveDir.length() > 0) {
+      moveDir.normalize();
+    }
+
+    // Set horizontal velocity based on the computed movement direction.
+    playerBody.velocity.x = moveDir.x * moveForce;
+    playerBody.velocity.z = moveDir.z * moveForce;
+
+    // Allow jumping if the player is close to the ground.
+    if ((keys["Space"] || keys["KeyJ"]) && Math.abs(playerBody.position.y - 0.5) < 0.1) {
       playerBody.velocity.y = jumpVelocity;
     }
 
@@ -187,8 +200,9 @@ function startGame() {
     playerMesh.quaternion.copy(playerBody.quaternion);
 
     // -----------------------------
-    // CAMERA CONTROL: Update camera to orbit around the player based on yaw and pitch
+    // CAMERA ORBIT CALCULATION
     // -----------------------------
+    // This positions the camera on a sphere behind/above the player using yaw and pitch.
     camera.position.x =
       playerMesh.position.x + cameraDistance * Math.cos(pitch) * Math.sin(yaw);
     camera.position.y =
@@ -196,7 +210,7 @@ function startGame() {
     camera.position.z =
       playerMesh.position.z + cameraDistance * Math.cos(pitch) * Math.cos(yaw);
 
-    // Ensure the camera looks at a point a bit above the player's center.
+    // Make the camera look at a point above the player.
     camera.lookAt(
       playerMesh.position.x,
       playerMesh.position.y + verticalOffset,
