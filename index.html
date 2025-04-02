@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>3D Platformer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Title Screen -->
+  <div id="titleScreen">
+    <h1>3D Platformer</h1>
+    <button id="playButton">Play</button>
+  </div>
+
+  <!-- Game Container -->
+  <div id="gameContainer" style="display: none;">
+    <canvas id="gameCanvas"></canvas>
+  </div>
+
+  <!-- Include libraries from CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+  
+  <!-- Load your game scripts -->
+  <script src="title.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
