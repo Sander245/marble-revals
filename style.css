@@ -1,0 +1,46 @@
+/* style.css */
+
+body, html {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: sans-serif;
+  background-color: #000;
+  color: #fff;
+}
+
+#titleScreen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #1a1a1a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+#titleScreen h1 {
+  font-size: 3em;
+  margin-bottom: 20px;
+}
+
+#titleScreen button {
+  font-size: 1.5em;
+  padding: 10px 20px;
+  cursor: pointer;
+}
+
+#gameContainer {
+  width: 100%;
+  height: 100%;
+}
+
+canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
