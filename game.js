@@ -8,6 +8,13 @@ function startGame() {
   let lastTime;
   const keys = {};
 
+  // Variables for mouse-controlled camera rotation
+  let yaw = Math.PI;  // Start facing the player from "behind"
+  let pitch = 0.1;    // Slight upward pitch initially
+  const sensitivity = 0.002;
+  const cameraDistance = 10;
+  const verticalOffset = 3; // Raise the target a bit so the camera orbits above the player’s center
+
   init();
   animate();
 
@@ -16,17 +23,15 @@ function startGame() {
     // THREE.JS SETUP
     // -----------------------------
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb); // light-blue sky
+    scene.background = new THREE.Color(0x87ceeb); // light blue sky
 
-    // Set up camera with a perspective view
+    // Set up camera with a perspective view. Its position will be calculated every frame.
     camera = new THREE.PerspectiveCamera(
       75,
       window.innerWidth / window.innerHeight,
       0.1,
       1000
     );
-    camera.position.set(0, 5, 10);
-    camera.lookAt(0, 0, 0);
 
     // Renderer: use the existing canvas element
     renderer = new THREE.WebGLRenderer({
@@ -51,32 +56,35 @@ function startGame() {
     world.broadphase = new CANNON.NaiveBroadphase();
     world.solver.iterations = 10;
 
-    // Create a ground plane (Three.js)
-    let groundMaterial = new THREE.MeshPhongMaterial({ color: 0x228B22 });
-    let groundGeometry = new THREE.PlaneGeometry(50, 50);
-    let groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+    // Create ground (Three.js)
+    const groundMaterial = new THREE.MeshPhongMaterial({ color: 0x228B22 });
+    const groundGeometry = new THREE.PlaneGeometry(50, 50);
+    const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
     groundMesh.rotation.x = -Math.PI / 2;
     scene.add(groundMesh);
 
-    // Create a ground body (Cannon.js)
-    let groundShape = new CANNON.Plane();
-    let groundBody = new CANNON.Body({ mass: 0 });
+    // Create ground body (Cannon.js)
+    const groundShape = new CANNON.Plane();
+    const groundBody = new CANNON.Body({ mass: 0 });
     groundBody.addShape(groundShape);
     groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
     world.addBody(groundBody);
 
+    // -----------------------------
+    // PLAYER SETUP
+    // -----------------------------
     // Create a player (red cube) - THREE.js mesh
-    let playerGeometry = new THREE.BoxGeometry(1, 1, 1);
-    let playerMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+    const playerGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const playerMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 });
     playerMesh = new THREE.Mesh(playerGeometry, playerMaterial);
     scene.add(playerMesh);
 
-    // Create a player body (Cannon.js body)
-    let boxShape = new CANNON.Box(new CANNON.Vec3(0.5, 0.5, 0.5));
+    // Create a player body (Cannon.js)
+    const boxShape = new CANNON.Box(new CANNON.Vec3(0.5, 0.5, 0.5));
     playerBody = new CANNON.Body({ mass: 1 });
     playerBody.addShape(boxShape);
     playerBody.position.set(0, 2, 0);
-    // Disable rotation for more straightforward controls
+    // Disable rotation for simpler controls
     playerBody.fixedRotation = true;
     playerBody.angularDamping = 1;
     world.addBody(playerBody);
@@ -84,15 +92,22 @@ function startGame() {
     // -----------------------------
     // INPUT HANDLING
     // -----------------------------
-    window.addEventListener("keydown", function(e) {
+    window.addEventListener("keydown", (e) => {
       keys[e.code] = true;
     });
-    window.addEventListener("keyup", function(e) {
+    window.addEventListener("keyup", (e) => {
       keys[e.code] = false;
     });
-
-    // Resize Handler
     window.addEventListener("resize", onWindowResize);
+
+    // Add pointer lock: Click on the canvas to lock the mouse pointer.
+    const canvas = document.getElementById("gameCanvas");
+    canvas.addEventListener("click", function () {
+      canvas.requestPointerLock();
+    });
+
+    // Listen for mouse movements to control the camera
+    document.addEventListener("mousemove", onMouseMove, false);
   }
 
   // Adjust camera and renderer on window resize
@@ -100,6 +115,22 @@ function startGame() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  // Update yaw and pitch based on mouse movement if pointer is locked.
+  function onMouseMove(e) {
+    // Check if pointer is locked on our canvas
+    const canvas = document.getElementById("gameCanvas");
+    if (document.pointerLockElement === canvas) {
+      yaw -= e.movementX * sensitivity;
+      pitch -= e.movementY * sensitivity;
+
+      // Clamp pitch to prevent flipping
+      const maxPitch = Math.PI / 2 - 0.1;
+      const minPitch = -Math.PI / 2 + 0.1;
+      if (pitch > maxPitch) pitch = maxPitch;
+      if (pitch < minPitch) pitch = minPitch;
+    }
   }
 
   // Main animation loop
@@ -110,7 +141,9 @@ function startGame() {
     const delta = lastTime ? (time - lastTime) / 1000 : 0;
     lastTime = time;
 
-    // Step the physics world
+    // -----------------------------
+    // PHYSICS: Step the physics simulation
+    // -----------------------------
     const fixedTimeStep = 1.0 / 60.0; // seconds
     world.step(fixedTimeStep, delta, 10);
 
@@ -119,8 +152,7 @@ function startGame() {
     // -----------------------------
     const moveForce = 10;
     const jumpVelocity = 5;
-    let moveDirection = new CANNON.Vec3(0, 0, 0);
-
+    const moveDirection = new CANNON.Vec3(0, 0, 0);
     if (keys["KeyW"] || keys["ArrowUp"]) {
       moveDirection.z -= 1;
     }
@@ -133,31 +165,43 @@ function startGame() {
     if (keys["KeyD"] || keys["ArrowRight"]) {
       moveDirection.x += 1;
     }
-    // Normalize the movement vector so diagonal speed isn't faster
     if (moveDirection.length() > 0) {
       moveDirection.normalize();
     }
-    // For a simple arcade feel, directly set the horizontal velocity
+    // Directly set the horizontal velocity for a simple arcade feel
     playerBody.velocity.x = moveDirection.x * moveForce;
     playerBody.velocity.z = moveDirection.z * moveForce;
 
-    // Jumping: allow jump if the player is near the ground.
-    // Since the player is a 1-unit-high cube, the bottom should be near y = 0.5.
-    if ((keys["Space"] || keys["KeyJ"]) && Math.abs(playerBody.position.y - 0.5) < 0.1) {
+    // Allow jumping if the player is near the ground.
+    if (
+      (keys["Space"] || keys["KeyJ"]) &&
+      Math.abs(playerBody.position.y - 0.5) < 0.1
+    ) {
       playerBody.velocity.y = jumpVelocity;
     }
 
     // -----------------------------
-    // SYNCING CANON WITH THREE.JS
+    // SYNCING PHYSICS WITH RENDERING
     // -----------------------------
     playerMesh.position.copy(playerBody.position);
     playerMesh.quaternion.copy(playerBody.quaternion);
 
-    // Make the camera follow the player
-    camera.position.x = playerMesh.position.x;
-    camera.position.z = playerMesh.position.z + 10;
-    camera.position.y = playerMesh.position.y + 5;
-    camera.lookAt(playerMesh.position);
+    // -----------------------------
+    // CAMERA CONTROL: Update camera to orbit around the player based on yaw and pitch
+    // -----------------------------
+    camera.position.x =
+      playerMesh.position.x + cameraDistance * Math.cos(pitch) * Math.sin(yaw);
+    camera.position.y =
+      playerMesh.position.y + verticalOffset + cameraDistance * Math.sin(pitch);
+    camera.position.z =
+      playerMesh.position.z + cameraDistance * Math.cos(pitch) * Math.cos(yaw);
+
+    // Ensure the camera looks at a point a bit above the player's center.
+    camera.lookAt(
+      playerMesh.position.x,
+      playerMesh.position.y + verticalOffset,
+      playerMesh.position.z
+    );
 
     renderer.render(scene, camera);
   }
